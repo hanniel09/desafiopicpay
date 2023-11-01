@@ -1,5 +1,6 @@
 package com.desafiopicpay.services;
 
+import com.desafiopicpay.domain.transaction.Transaction;
 import com.desafiopicpay.domain.user.User;
 import com.desafiopicpay.dtos.TransactionDto;
 import com.desafiopicpay.repositories.TransactionRepository;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Service
@@ -22,16 +24,30 @@ public class TransactionService {
 
     @Autowired
     private RestTemplate restTemplate;
-
+    
     private void createTransaction(TransactionDto transaction) throws Exception {
         User sender = this.userService.findUserById(transaction.senderId());
         User receiver = this.userService.findUserById(transaction.receiverId());
 
         userService.valideTransaction(sender, transaction.value());
 
-        if(this.authorizeTransaction(sender, transaction.value())){
-            
+        boolean isAuthorized = this.authorizeTransaction(sender, transaction.value());
+        if(!isAuthorized){
+            throw new Exception("transaction not authorized");
         }
+
+        Transaction newTransaction = new Transaction();
+        newTransaction.setAmount(transaction.value());
+        newTransaction.setSender(sender);
+        newTransaction.setReceiver(receiver);
+        newTransaction.setTimestamp(LocalDateTime.now());
+
+        sender.setBalance(sender.getBalance().subtract(transaction.value()));
+        receiver.setBalance(receiver.getBalance().add(transaction.value()));
+
+        this.repository.save(newTransaction);
+        this.userService.saveUser(sender);
+        this.userService.saveUser(receiver);
     }
 
     public boolean authorizeTransaction(User sender, BigDecimal value){
